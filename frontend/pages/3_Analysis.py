@@ -192,7 +192,6 @@ with tab2:
                         "unknown"
                     ).upper()
 
-                    # ── Summary Metrics ─────────────────────
                     col1, col2 = st.columns(2)
 
                     with col1:
@@ -207,23 +206,21 @@ with tab2:
                             severity
                         )
 
-                    # ── Severity Banner ─────────────────────
                     if severity == "HIGH":
                         st.error(
-                            f"⚠️ HIGH RISK DOCUMENT"
+                            "⚠️ HIGH RISK DOCUMENT"
                         )
 
                     elif severity == "MEDIUM":
                         st.warning(
-                            f"⚠️ MEDIUM RISK DOCUMENT"
+                            "⚠️ MEDIUM RISK DOCUMENT"
                         )
 
                     else:
                         st.success(
-                            f"✅ LOW RISK DOCUMENT"
+                            "✅ LOW RISK DOCUMENT"
                         )
 
-                    # ── Individual Risks ────────────────────
                     for i, risk in enumerate(
                         risks,
                         1
@@ -277,17 +274,129 @@ with tab3:
         unsafe_allow_html=True
     )
 
-    st.info(
-        "📌 Compliance checks require document upload. "
-        "Please use the Upload page."
-    )
+    default_rules = [
+        {
+            "name": "Termination Clause",
+            "description": "Document must contain termination clause",
+            "pattern": "termination",
+            "required": True
+        },
+        {
+            "name": "Liability Clause",
+            "description": "Document should contain liability clause",
+            "pattern": "liability",
+            "required": False
+        },
+        {
+            "name": "Confidentiality Clause",
+            "description": "Document should contain confidentiality clause",
+            "pattern": "confidentiality",
+            "required": False
+        }
+    ]
 
-    st.button(
+    if st.button(
         "📋 Check Compliance",
         use_container_width=True,
-        key="btn_compliance",
-        disabled=True
-    )
+        key="btn_compliance"
+    ):
+
+        with st.spinner("Running compliance checks..."):
+
+            result = get_compliance(
+                selected_index,
+                default_rules
+            )
+
+            if result.get("error"):
+                st.error(
+                    f"Compliance check failed: {result['error']}"
+                )
+
+            else:
+                compliance_results = result.get(
+                    "compliance_results",
+                    []
+                )
+
+                total_checks = result.get(
+                    "total_checks",
+                    0
+                )
+
+                passed_checks = result.get(
+                    "passed_checks",
+                    0
+                )
+
+                st.success(
+                    f"Passed {passed_checks} / {total_checks} compliance checks"
+                )
+
+                for rule in compliance_results:
+
+                    rule_name = rule.get(
+                        "name",
+                        "Unknown Rule"
+                    )
+
+                    passed = rule.get(
+                        "passed",
+                        False
+                    )
+
+                    description = rule.get(
+                        "description",
+                        ""
+                    )
+
+                    matched_text = rule.get(
+                        "matched_text",
+                        ""
+                    )
+
+                    if passed:
+                        with st.expander(
+                            f"✅ {rule_name} — PASSED"
+                        ):
+                            st.write(
+                                f"**Description:** {description}"
+                            )
+
+                            if matched_text:
+                                st.code(
+                                    matched_text,
+                                    language="text"
+                                )
+
+                    else:
+                        with st.expander(
+                            f"❌ {rule_name} — FAILED"
+                        ):
+                            st.write(
+                                f"**Description:** {description}"
+                            )
+
+                            if matched_text:
+                                st.code(
+                                    matched_text,
+                                    language="text"
+                                )
+
+                if passed_checks == total_checks:
+                    st.success(
+                        "🎉 Document is fully compliant."
+                    )
+
+                elif passed_checks > 0:
+                    st.warning(
+                        "⚠️ Document is partially compliant."
+                    )
+
+                else:
+                    st.error(
+                        "🚨 Document failed compliance requirements."
+                    )
 
 # ═════════════════════════════════════════════════════════════════════
 # TAB 4 — SUMMARY
