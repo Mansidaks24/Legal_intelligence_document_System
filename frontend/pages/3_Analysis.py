@@ -280,21 +280,21 @@ with tab3:
         }
     ]
 
-    # ── Parse Uploaded Rules ────────────────────────────────────────
+    # ── Manual Rules Input ───────────────────────────────────────────
+    rules_text = st.text_area(
+        "Compliance Rules (JSON format)",
+        value=json.dumps(default_rules, indent=2),
+        height=250
+    )
+
+    # ── Determine Active Rules ───────────────────────────────────────
     if uploaded_rules is not None:
         try:
-            file_content = uploaded_rules.read().decode(
-                "utf-8"
-            )
+            file_content = uploaded_rules.read().decode("utf-8")
 
-            custom_rules = json.loads(
-                file_content
-            )
+            custom_rules = json.loads(file_content)
 
-            if isinstance(
-                custom_rules,
-                list
-            ):
+            if isinstance(custom_rules, list) and len(custom_rules) > 0:
                 rules_to_use = custom_rules
 
                 st.success(
@@ -305,7 +305,7 @@ with tab3:
                 rules_to_use = default_rules
 
                 st.warning(
-                    "Uploaded file must contain a valid JSON list. Using default rules."
+                    "Uploaded file is empty or invalid. Using default rules."
                 )
 
         except Exception as e:
@@ -316,26 +316,29 @@ with tab3:
             )
 
     else:
-        rules_to_use = default_rules
+        try:
+            parsed_rules = json.loads(rules_text)
 
-    # ── Display Active Rules ────────────────────────────────────────
-    with st.expander(
-        "📜 Active Compliance Rules"
-    ):
-        st.json(
-            rules_to_use
-        )
+            if isinstance(parsed_rules, list) and len(parsed_rules) > 0:
+                rules_to_use = parsed_rules
+            else:
+                rules_to_use = default_rules
 
-    # ── Compliance Check ────────────────────────────────────────────
+        except Exception:
+            rules_to_use = default_rules
+
+    # ── Display Active Rules ─────────────────────────────────────────
+    with st.expander("📜 Active Compliance Rules"):
+        st.json(rules_to_use)
+
+    # ── Compliance Check Button ──────────────────────────────────────
     if st.button(
         "📋 Check Compliance",
         use_container_width=True,
         key="btn_compliance"
     ):
 
-        with st.spinner(
-            "Checking compliance..."
-        ):
+        with st.spinner("Checking compliance..."):
 
             result = get_compliance(
                 selected_index,
@@ -358,7 +361,12 @@ with tab3:
                 0
             )
 
-            if passed == total:
+            if total == 0:
+                st.error(
+                    "❌ No compliance rules were processed. Check JSON formatting."
+                )
+
+            elif passed == total:
                 st.success(
                     f"✅ Compliance Passed! {passed}/{total} rules satisfied"
                 )
@@ -373,6 +381,7 @@ with tab3:
                     f"❌ Compliance Failed! Only {passed}/{total} rules satisfied"
                 )
 
+            # ── Rule Results ─────────────────────────────────────────
             for rule in result.get(
                 "compliance_results",
                 []
@@ -398,11 +407,7 @@ with tab3:
                     ""
                 )
 
-                icon = (
-                    "✅"
-                    if passed_rule
-                    else "❌"
-                )
+                icon = "✅" if passed_rule else "❌"
 
                 with st.expander(
                     f"{icon} {rule_name}"
