@@ -2,24 +2,33 @@ import requests
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import quote
 import os
-import streamlit as st
+import json
 
+# ═════════════════════════════════════════════════════════════════════
+# CONFIG
+# ═════════════════════════════════════════════════════════════════════
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# ── Backend URL Configuration ────────────────────────────────────────
-try:
-    BACKEND_URL = st.secrets["BACKEND_URL"]
-except Exception:
-    BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+# PRODUCTION BACKEND URL
+BACKEND_URL = os.getenv(
+    "BACKEND_URL",
+    "https://legal-intelligence-document-system.onrender.com"
+)
 
-API_TIMEOUT = int(os.getenv("API_TIMEOUT", 300))
+API_TIMEOUT = int(
+    os.getenv(
+        "API_TIMEOUT",
+        180
+    )
+)
 
 
 # ═════════════════════════════════════════════════════════════════════
-# SYSTEM HEALTH
+# HEALTH CHECK
 # ═════════════════════════════════════════════════════════════════════
 def health_check():
     try:
@@ -27,14 +36,361 @@ def health_check():
             f"{BACKEND_URL}/health",
             timeout=API_TIMEOUT
         )
+
         resp.raise_for_status()
+
         return resp.json()
 
     except Exception as e:
         logger.error(f"Health check error: {e}")
+
         return None
 
 
+# ═════════════════════════════════════════════════════════════════════
+# DOCUMENT LIST
+# ═════════════════════════════════════════════════════════════════════
+def get_documents():
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/documents",
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get documents error: {e}")
+
+        return {
+            "documents": [],
+            "total": 0
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# FILE LIST
+# ═════════════════════════════════════════════════════════════════════
+def get_files():
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/files",
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get files error: {e}")
+
+        return {
+            "files": [],
+            "total": 0
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# UPLOAD DOCUMENT
+# ═════════════════════════════════════════════════════════════════════
+def upload_document(file_bytes, filename, file_type):
+    try:
+        files = {
+            "file": (
+                filename,
+                file_bytes,
+                file_type
+            )
+        }
+
+        resp = requests.post(
+            f"{BACKEND_URL}/upload",
+            files=files,
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        data = resp.json()
+
+        if "status" not in data and "message" in data:
+            if "successfully" in data.get(
+                "message",
+                ""
+            ).lower():
+                data["status"] = "success"
+            else:
+                data["status"] = "error"
+
+        return data
+
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# RETRIEVE CLAUSES
+# ═════════════════════════════════════════════════════════════════════
+def retrieve_clauses(index_name, query, top_k=5):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/retrieve",
+            params={
+                "document": index_name,
+                "query": query,
+                "top_k": top_k
+            },
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Retrieve error: {e}")
+
+        return {
+            "clauses": [],
+            "error": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# CLAUSE ANALYSIS
+# ═════════════════════════════════════════════════════════════════════
+def get_clauses(index_name, top_k=5):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/analysis/clauses",
+            params={
+                "document": index_name,
+                "per_query_k": top_k
+            },
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get clauses error: {e}")
+
+        return {
+            "clauses": [],
+            "error": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# RISK ANALYSIS
+# ═════════════════════════════════════════════════════════════════════
+def get_risk(index_name, top_k=5):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/analysis/risk",
+            params={
+                "document": index_name
+            },
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get risk error: {e}")
+
+        return {
+            "risks": [],
+            "error": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# COMPLIANCE ANALYSIS
+# ═════════════════════════════════════════════════════════════════════
+def get_compliance(index_name, rules):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/analysis/compliance",
+            params={
+                "document": index_name,
+                "rules": json.dumps(rules)
+            },
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get compliance error: {e}")
+
+        return {
+            "status": "error",
+            "error": str(e),
+            "compliance_results": [],
+            "total_checks": 0,
+            "passed_checks": 0
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# SUMMARY
+# ═════════════════════════════════════════════════════════════════════
+def get_summary(index_name, top_k=5):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/analysis/summary",
+            params={
+                "document": index_name,
+                "top_k": top_k
+            },
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get summary error: {e}")
+
+        return {
+            "summary": "",
+            "error": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# STRUCTURED EXTRACTION
+# ═════════════════════════════════════════════════════════════════════
+def get_structured(index_name, top_k=5):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/analysis/structured",
+            params={
+                "document": index_name,
+                "per_query_k": top_k
+            },
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get structured error: {e}")
+
+        return {
+            "structured": {},
+            "error": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# LLM SUMMARY
+# ═════════════════════════════════════════════════════════════════════
+def get_llm_summary(index_name):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/llm/summary/{index_name}",
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get LLM summary error: {e}")
+
+        return {
+            "summary": "",
+            "error": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# LLM RISK
+# ═════════════════════════════════════════════════════════════════════
+def get_llm_risk(index_name):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/llm/risk/{index_name}",
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get LLM risk error: {e}")
+
+        return {
+            "risk_analysis": "",
+            "error": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# LLM STRUCTURED
+# ═════════════════════════════════════════════════════════════════════
+def get_llm_structured(index_name):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/llm/structured/{index_name}",
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Get LLM structured error: {e}")
+
+        return {
+            "structured": {},
+            "error": str(e)
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# DELETE INDEX
+# ═════════════════════════════════════════════════════════════════════
+def delete_index(index_name):
+    try:
+        resp = requests.delete(
+            f"{BACKEND_URL}/index/{index_name}",
+            timeout=API_TIMEOUT
+        )
+
+        resp.raise_for_status()
+
+        return resp.json()
+
+    except Exception as e:
+        logger.error(f"Delete index error: {e}")
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 # ═════════════════════════════════════════════════════════════════════
 # DOCUMENT LISTING
 # ═════════════════════════════════════════════════════════════════════
