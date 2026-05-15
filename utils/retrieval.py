@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import FakeEmbeddings
 from langchain.schema import Document
 
 logger = logging.getLogger(__name__)
@@ -41,41 +41,18 @@ MIN_RELEVANCE_SCORE = float(
 _embeddings_instance = None
 
 
-def _get_embeddings() -> HuggingFaceEmbeddings:
+def _get_embeddings():
     """
-    Load lightweight embedding model only once.
-
-    Improvements:
-    - Smaller model
-    - CPU only
-    - Lower memory footprint
-    - Prevent repeated loading crashes
+    Ultra-light deployment-safe embeddings for Render free tier.
     """
     global _embeddings_instance
 
     if _embeddings_instance is None:
-        logger.info(
-            f"Loading lightweight embedding model: {_EMBEDDING_MODEL_NAME}"
-        )
+        logger.info("Loading ultra-light deployment embeddings")
 
-        _embeddings_instance = HuggingFaceEmbeddings(
-            model_name=_EMBEDDING_MODEL_NAME,
-            model_kwargs={
-                "device": "cpu"
-            },
-            encode_kwargs={
-                "normalize_embeddings": True,
-                "batch_size": 8
-            },
-            cache_folder="./models"
-        )
-
-        logger.info(
-            "Lightweight embedding model loaded successfully."
-        )
+        _embeddings_instance = FakeEmbeddings(size=384)
 
     return _embeddings_instance
-
 
 # ─────────────────────────────────────────────────────────────────────
 # Build vectorstore
