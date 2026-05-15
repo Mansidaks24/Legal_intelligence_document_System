@@ -434,41 +434,68 @@ def api_risk_analysis(document: str):
     }
 
 
-@app.post("/analysis/compliance", tags=["Analysis"])
-async def api_compliance_check(
-    file: UploadFile = File(...),
-    rules: str = Form(default="[]"),
+@app.get("/analysis/compliance", tags=["Analysis"])
+def api_compliance_check(
+    document: str = Query(..., description="Document index name"),
+    rules: str = Query(default="[]", description="Compliance rules as JSON"),
 ):
-    """Run compliance checks against an uploaded document using regex rules."""
+    """
+    Run compliance checks on an indexed document.
+    
+    Example rules:
+    [
+        {"name": "has_termination", "description": "Has termination clause", "pattern": "termination", "required": true},
+        {"name": "has_liability", "description": "Has liability clause", "pattern": "liability", "required": false}
+    ]
+    """
     import json
-
+    
     try:
         rules_list = json.loads(rules)
         if not isinstance(rules_list, list):
             raise ValueError("rules must be a JSON array")
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid rules format. Must be a valid JSON array."
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid rules format: {str(e)}")
+    
+    # Load the document's indexed content
+    try:
+        vs = load_vectorstore(store_dir=str(VECTORSTORE_DIR), index_name=document)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"No index found for '{document}'")
+    
+    # Extract text from the document
+    try:
+        # Get all clauses from the index
+        clauses = extract_important_clauses(vectorstore=vs, per_query_k=20)
+        combined_text = "\n\n".join(
+            f"{c.get('content', '')}" for c in clauses
         )
-
-    contents = await file.read()
-    safe_filename = Path(file.filename).name
-    save_path = UPLOAD_DIR / safe_filename
-    with open(save_path, "wb") as f:
-        f.write(contents)
-
-    extraction = extract_text(str(save_path))
-    text = extraction.get("text", "")
-
-    if not rules_list:
-        rules_list = [
-            {"name": "has_gov_law", "description": "Contains governing law clause", "pattern": "governing law", "required": True}
-        ]
-
-    result = compliance_check_from_text(text, rules_list)
-    return {"status": "success", **result}
-
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error extracting content: {str(e)}")
+    
+    # Run compliance check
+    try:
+        if not rules_list:
+            rules_list = [
+                {
+                    "name": "has_termination",
+                    "description": "Contains termination clause",
+                    "pattern": "termination",
+                    "required": True
+                }
+            ]
+        
+        result = compliance_check_from_text(combined_text, rules_list)
+        
+        return {
+            "status": "success",
+            "document": document,
+            "compliance_results": result.get("compliance_results", []),
+            "total_checks": len(rules_list),
+            "passed_checks": sum(1 for r in result.get("compliance_results", []) if r.get("passed")),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Compliance check error: {str(e)}")
 
 @app.get("/analysis/summary", tags=["Analysis"])
 def api_summarize(document: str, top_k: int = 5):
