@@ -48,19 +48,61 @@ if st.button("🔎 Search", use_container_width=True):
         with st.spinner("Searching..."):
             result = retrieve_clauses(selected_index, query, top_k)
             
-            if result.get("error"):
-                st.error(f"Search failed: {result['error']}")
+            # Debug: Show what we got back
+            # st.write("DEBUG:", result)
+            
+            # Check for errors first
+            if result.get("status") == "error" or result.get("error"):
+                error_msg = result.get("error") or result.get("message", "Unknown error")
+                st.error(f"Search failed: {error_msg}")
+                st.info("💡 Possible fixes:\n- Ensure the document is properly indexed\n- Try a different search query\n- Check that backend is running")
             else:
-                clauses = result.get("results", [])
-                if clauses:
+                # Try to get clauses from either "clauses" or "results" key
+                clauses = result.get("clauses", result.get("results", []))
+                
+                if clauses and len(clauses) > 0:
                     st.success(f"Found {len(clauses)} relevant clauses")
+                    
+                    # Show statistics if available
+                    if result.get("stats"):
+                        col1, col2, col3 = st.columns(3)
+                        stats = result["stats"]
+                        with col1:
+                            st.metric("Max Score", f"{stats.get('max_score', 0):.4f}")
+                        with col2:
+                            st.metric("Avg Score", f"{stats.get('avg_score', 0):.4f}")
+                        with col3:
+                            st.metric("Min Score", f"{stats.get('min_score', 0):.4f}")
+                        st.markdown("---")
+                    
+                    # Display clauses
                     for i, clause in enumerate(clauses, 1):
-                        with st.expander(f"📄 Result {i}", expanded=i==1):
-                            st.markdown(clause.get("content", ""))
-                            relevance = clause.get('relevance_score', 0)
-                            st.markdown(f"**Relevance Score:** {relevance:.2f} | **Source:** {clause.get('source', 'N/A')}")
+                        with st.expander(f"📄 Result {i} - {clause.get('source', 'Unknown')}", expanded=i==1):
+                            # Show content
+                            content = clause.get("content", "No content")
+                            st.markdown(content)
+                            
+                            # Show metadata
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                relevance = clause.get('relevance_score', 0)
+                                st.metric("Relevance Score", f"{relevance:.4f}")
+                            with col2:
+                                st.metric("Word Count", clause.get('word_count', 0))
+                            with col3:
+                                source = clause.get('source', 'N/A')
+                                st.metric("Source", source.split('/')[-1] if '/' in source else source)
+                            
+                            # Show special markers
+                            markers = []
+                            if clause.get('has_dates'):
+                                markers.append("📅 Contains Dates")
+                            if clause.get('has_monetary_amounts'):
+                                markers.append("💰 Contains Monetary Amounts")
+                            if markers:
+                                st.info(" | ".join(markers))
                 else:
-                    st.info("No clauses found matching your query.")
+                    st.info("No clauses found matching your query. Try a different search term.")
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #555;'>💡 Search across all indexed documents for relevant clauses and terms</p>", unsafe_allow_html=True)
