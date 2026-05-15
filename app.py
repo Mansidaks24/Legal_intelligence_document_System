@@ -445,14 +445,30 @@ def api_compliance_check(
 
     # Parse rules
     try:
-        rules_list = json.loads(rules)
-        if not isinstance(rules_list, list):
-            raise ValueError("rules must be a JSON array")
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid rules format: {str(e)}"
-        )
+        if isinstance(rules, str):
+        rules = rules.strip()
+
+        # Handle accidental empty string
+        if not rules:
+            rules_list = []
+
+        else:
+            rules_list = json.loads(rules)
+
+    elif isinstance(rules, list):
+        rules_list = rules
+
+    else:
+        rules_list = []
+
+    if not isinstance(rules_list, list):
+        raise ValueError("rules must be a JSON array")
+
+except Exception as e:
+    raise HTTPException(
+        status_code=400,
+        detail=f"Invalid rules format: {str(e)}"
+    )
 
     # Load vectorstore
     try:
