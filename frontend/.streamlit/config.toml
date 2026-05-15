@@ -1,0 +1,13 @@
+[theme]
+primaryColor = "#1F3A5E"
+backgroundColor = "#F5F5F5"
+secondaryBackgroundColor = "#FEFBEA"
+textColor = "#1F3A5E"
+font = "sans serif"
+
+[client]
+showErrorDetails = true
+
+[server]
+maxUploadSize = 500
+port = 8501
