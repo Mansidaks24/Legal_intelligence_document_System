@@ -1,505 +1,151 @@
+ 
 import streamlit as st
 import sys
 from pathlib import Path
-
+ 
 sys.path.append(str(Path(__file__).parent.parent))
-
-from utils.api import (
-    get_documents,
-    get_clauses,
-    get_risk,
-    get_compliance,
-    get_summary,
-    get_structured,
-)
-
+from utils.api import get_documents, get_clauses, get_risk, get_compliance, get_summary, get_structured
 from utils.styles import apply_judicial_theme
-
-# ── Page Config ──────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Analysis - Legal Document Intelligence",
-    page_icon="📊",
-    layout="wide"
-)
-
+ 
+st.set_page_config(page_title="Analysis - Legal Document Intelligence", page_icon="📊", layout="wide")
 apply_judicial_theme()
-
-# ── Header ───────────────────────────────────────────────────────────
-st.markdown(
-    "<h1 style='text-align: center; color: #1F3A5E;'>📊 DOCUMENT ANALYSIS</h1>",
-    unsafe_allow_html=True
-)
-
+ 
+st.markdown("<h1 style='text-align: center; color: #1F3A5E;'>📊 DOCUMENT ANALYSIS</h1>", unsafe_allow_html=True)
 st.markdown("---")
-
-# ── Document Check ───────────────────────────────────────────────────
+ 
 docs = get_documents()
-
 if docs.get("total", 0) == 0:
-    st.warning(
-        "📌 No documents indexed yet. Please upload documents first."
-    )
+    st.warning("📌 No documents indexed yet. Please upload documents first.")
     st.stop()
-
-indices = [
-    d.get("index_name", "")
-    for d in docs.get("documents", [])
-]
-
-selected_index = st.selectbox(
-    "Select document index:",
-    indices
-)
-
-top_k = st.slider(
-    "Number of items to retrieve:",
-    1,
-    10,
-    5
-)
-
-# ── Tabs ─────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "Clauses",
-        "Risk",
-        "Compliance",
-        "Summary",
-        "Structured"
-    ]
-)
-
-# ═════════════════════════════════════════════════════════════════════
-# TAB 1 — CLAUSES
-# ═════════════════════════════════════════════════════════════════════
+ 
+indices = [d["index_name"] for d in docs["documents"]]
+selected_index = st.selectbox("Select document index:", indices)
+ 
+top_k = st.slider("Number of items to retrieve:", 1, 10, 5)
+ 
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Clauses", "Risk", "Compliance", "Summary", "Structured"])
+ 
 with tab1:
-    st.markdown(
-        "<h3 style='color: #1F3A5E;'>📋 Key Clauses</h3>",
-        unsafe_allow_html=True
-    )
-
-    if st.button(
-        "📖 Retrieve Clauses",
-        use_container_width=True,
-        key="btn_clauses"
-    ):
-
+    st.markdown("<h3 style='color: #1F3A5E;'>📋 Key Clauses</h3>", unsafe_allow_html=True)
+    if st.button("📖 Retrieve Clauses", use_container_width=True, key="btn_clauses"):
         with st.spinner("Retrieving clauses..."):
-
-            result = get_clauses(
-                selected_index,
-                top_k
-            )
-
+            result = get_clauses(selected_index, top_k)
             if result.get("error"):
-                st.error(
-                    f"Failed to retrieve clauses: {result['error']}"
-                )
-
+                st.error(f"Failed to retrieve clauses: {result['error']}")
             else:
                 clauses = result.get("clauses", [])
-
                 if clauses:
-                    st.success(
-                        f"Found {len(clauses)} key clauses"
-                    )
-
-                    for clause in clauses:
-                        chunk_index = clause.get(
-                            "chunk_index",
-                            "N/A"
-                        )
-
-                        relevance = clause.get(
-                            "relevance_score",
-                            0
-                        )
-
-                        with st.expander(
-                            f"Clause #{chunk_index} | Relevance Score: {relevance}"
-                        ):
-
-                            st.markdown(
-                                clause.get(
-                                    "content",
-                                    "No content available."
-                                )
-                            )
-
-                            st.caption(
-                                f"Source: {clause.get('source', 'Unknown')} | "
-                                f"Words: {clause.get('word_count', 0)}"
-                            )
-
-                            if clause.get(
-                                "has_monetary_amounts"
-                            ):
-                                st.info(
-                                    "💰 Contains monetary references"
-                                )
-
-                            if clause.get(
-                                "has_dates"
-                            ):
-                                st.info(
-                                    "📅 Contains date references"
-                                )
-
+                    st.success(f"Found {len(clauses)} key clauses")
+                    for i, clause in enumerate(clauses, 1):
+                        with st.expander(f"Clause {i}"):
+                            st.markdown(clause.get("content", clause.get("text", "")))
                 else:
-                    st.info(
-                        "No clauses found."
-                    )
-
-# ═════════════════════════════════════════════════════════════════════
-# TAB 2 — RISK ANALYSIS
-# ═════════════════════════════════════════════════════════════════════
+                    st.info("No clauses found.")
+ 
 with tab2:
-    st.markdown(
-        "<h3 style='color: #1F3A5E;'>⚠️ Risk Analysis</h3>",
-        unsafe_allow_html=True
-    )
-
-    if st.button(
-        "🔍 Analyze Risks",
-        use_container_width=True,
-        key="btn_risk"
-    ):
-
+    st.markdown("<h3 style='color: #1F3A5E;'>⚠️ Risk Analysis</h3>", unsafe_allow_html=True)
+    if st.button("🔍 Analyze Risks", use_container_width=True, key="btn_risk"):
         with st.spinner("Analyzing risks..."):
-
-            result = get_risk(
-                selected_index,
-                top_k
-            )
-
+            result = get_risk(selected_index, top_k)
             if result.get("error"):
-                st.error(
-                    f"Failed to analyze risks: {result['error']}"
-                )
-
+                st.error(f"Failed to analyze risks: {result['error']}")
             else:
                 risks = result.get("risks", [])
-
                 if risks:
-
-                    avg_score = result.get(
-                        "avg_score",
-                        0
-                    )
-
-                    severity = result.get(
-                        "severity",
-                        "unknown"
-                    ).upper()
-
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.metric(
-                            "Average Risk Score",
-                            avg_score
-                        )
-
-                    with col2:
-                        st.metric(
-                            "Severity Level",
-                            severity
-                        )
-
+                    severity = result.get("severity", "unknown").upper()
+                    avg_score = result.get("avg_score", 0)
+                   
+                    # Color code by severity
                     if severity == "HIGH":
-                        st.error(
-                            "⚠️ HIGH RISK DOCUMENT"
-                        )
-
+                        st.error(f"⚠️ **HIGH RISK** - Average Score: {avg_score}")
                     elif severity == "MEDIUM":
-                        st.warning(
-                            "⚠️ MEDIUM RISK DOCUMENT"
-                        )
-
+                        st.warning(f"⚠️ **MEDIUM RISK** - Average Score: {avg_score}")
                     else:
-                        st.success(
-                            "✅ LOW RISK DOCUMENT"
-                        )
-
-                    for i, risk in enumerate(
-                        risks,
-                        1
-                    ):
-
-                        score = risk.get(
-                            "score",
-                            risk.get(
-                                "risk_score",
-                                0
-                            )
-                        )
-
-                        keywords = risk.get(
-                            "matched_keywords",
-                            []
-                        )
-
-                        risk_level = risk.get(
-                            "risk_level",
-                            "Unknown"
-                        )
-
-                        with st.expander(
-                            f"Risk {i} | Score: {score} | Level: {risk_level}"
-                        ):
-
-                            st.markdown(
-                                risk.get(
-                                    "content",
-                                    "No content available."
-                                )
-                            )
-
+                        st.info(f"✅ **LOW RISK** - Average Score: {avg_score}")
+                   
+                    for i, risk in enumerate(risks, 1):
+                        score = risk.get("score", 0)
+                        keywords = risk.get("matched_keywords", [])
+                        with st.expander(f"Risk {i} (Score: {score})", expanded=False):
+                            st.markdown(risk.get("content", ""))
                             if keywords:
-                                st.caption(
-                                    f"🔴 Risk Keywords: {', '.join(keywords)}"
-                                )
-
+                                st.caption(f"🔴 Risk Keywords: {', '.join(keywords)}")
                 else:
-                    st.info(
-                        "No significant risks detected."
-                    )
-
-# ═════════════════════════════════════════════════════════════════════
-# TAB 3 — COMPLIANCE
-# ═════════════════════════════════════════════════════════════════════
+                    st.info("No risk analysis available.")
+ 
 with tab3:
-    st.markdown(
-        "<h3 style='color: #1F3A5E;'>✅ Compliance Review</h3>",
-        unsafe_allow_html=True
+    st.markdown("<h3 style='color: #1F3A5E;'>✅ Compliance Review</h3>", unsafe_allow_html=True)
+ 
+    uploaded_file = st.file_uploader(
+        "Upload document for compliance check",
+        type=["pdf", "docx"],
+        key="compliance_upload"
     )
-
-    default_rules = [
-        {
-            "name": "Termination Clause",
-            "description": "Document must contain termination clause",
-            "pattern": "termination",
-            "required": True
-        },
-        {
-            "name": "Liability Clause",
-            "description": "Document should contain liability clause",
-            "pattern": "liability",
-            "required": False
-        },
-        {
-            "name": "Confidentiality Clause",
-            "description": "Document should contain confidentiality clause",
-            "pattern": "confidentiality",
-            "required": False
-        }
-    ]
-
-    if st.button(
-        "📋 Check Compliance",
-        use_container_width=True,
-        key="btn_compliance"
-    ):
-
-        with st.spinner("Running compliance checks..."):
-
-            result = get_compliance(
-                selected_index,
-                default_rules
-            )
-
-            if result.get("error"):
-                st.error(
-                    f"Compliance check failed: {result['error']}"
-                )
-
-            else:
-                compliance_results = result.get(
-                    "compliance_results",
-                    []
-                )
-
-                total_checks = result.get(
-                    "total_checks",
-                    0
-                )
-
-                passed_checks = result.get(
-                    "passed_checks",
-                    0
-                )
-
-                st.success(
-                    f"Passed {passed_checks} / {total_checks} compliance checks"
-                )
-
-                for rule in compliance_results:
-
-                    rule_name = rule.get(
-                        "name",
-                        "Unknown Rule"
-                    )
-
-                    passed = rule.get(
-                        "passed",
-                        False
-                    )
-
-                    description = rule.get(
-                        "description",
-                        ""
-                    )
-
-                    matched_text = rule.get(
-                        "matched_text",
-                        ""
-                    )
-
-                    if passed:
-                        with st.expander(
-                            f"✅ {rule_name} — PASSED"
-                        ):
-                            st.write(
-                                f"**Description:** {description}"
-                            )
-
-                            if matched_text:
-                                st.code(
-                                    matched_text,
-                                    language="text"
-                                )
-
-                    else:
-                        with st.expander(
-                            f"❌ {rule_name} — FAILED"
-                        ):
-                            st.write(
-                                f"**Description:** {description}"
-                            )
-
-                            if matched_text:
-                                st.code(
-                                    matched_text,
-                                    language="text"
-                                )
-
-                if passed_checks == total_checks:
-                    st.success(
-                        "🎉 Document is fully compliant."
-                    )
-
-                elif passed_checks > 0:
-                    st.warning(
-                        "⚠️ Document is partially compliant."
-                    )
-
+ 
+    rules_text = st.text_area(
+        "Compliance Rules (JSON format)",
+        value='''[
+  {"name": "Notice Period Check", "pattern": "notice period", "required": true},
+  {"name": "Penalty Clause Check", "pattern": "reimbursement|penalty", "required": true},
+  {"name": "Confidentiality Check", "pattern": "confidential", "required": true},
+  {"name": "Termination Check", "pattern": "termination", "required": true}
+]''',
+        height=150
+    )
+ 
+    if st.button("📋 Check Compliance", use_container_width=True, key="btn_compliance"):
+        if not uploaded_file:
+            st.warning("Please upload the document first!")
+        else:
+            with st.spinner("Checking compliance..."):
+                result = get_compliance(uploaded_file, rules_text)
+ 
+            if result:
+                overall = result.get("overall_passed", False)
+                passed = result.get("passed_count", 0)
+                total = result.get("total_rules", 0)
+ 
+                if overall:
+                    st.success(f"✅ Compliance Passed! {passed}/{total} rules satisfied")
                 else:
-                    st.error(
-                        "🚨 Document failed compliance requirements."
-                    )
-
-# ═════════════════════════════════════════════════════════════════════
-# TAB 4 — SUMMARY
-# ═════════════════════════════════════════════════════════════════════
+                    st.error(f"❌ Compliance Failed! Only {passed}/{total} rules satisfied")
+ 
+                for rule in result.get("rules", []):
+                    icon = "✅" if rule["passed"] else "❌"
+                    st.write(f"{icon} **{rule['id']}** — Found: {'Yes ✅' if rule['found'] else 'No ❌'}")
+            else:
+                st.error("Compliance check failed. Try again!")
+ 
 with tab4:
-    st.markdown(
-        "<h3 style='color: #1F3A5E;'>📄 Document Summary</h3>",
-        unsafe_allow_html=True
-    )
-
-    if st.button(
-        "📊 Generate Summary",
-        use_container_width=True,
-        key="btn_summary"
-    ):
-
+    st.markdown("<h3 style='color: #1F3A5E;'>📄 Document Summary</h3>", unsafe_allow_html=True)
+    if st.button("📊 Generate Summary", use_container_width=True, key="btn_summary"):
         with st.spinner("Generating summary..."):
-
-            result = get_summary(
-                selected_index,
-                top_k
-            )
-
+            result = get_summary(selected_index, top_k)
             if result.get("error"):
-                st.error(
-                    f"Failed to generate summary: {result['error']}"
-                )
-
+                st.error(f"Failed to generate summary: {result['error']}")
             else:
-                summary_text = result.get(
-                    "summary",
-                    ""
-                )
-
-                if summary_text:
-                    st.success(
-                        "✅ Summary generated"
-                    )
-
-                    st.text_area(
-                        "Summary",
-                        summary_text,
-                        height=400
-                    )
-
+                summary_text = result.get("summary", "No summary available.")
+                if summary_text and summary_text != "No content available to summarize.":
+                    st.success("✅ Summary generated")
+                    # Display the summary with better formatting
+                    st.markdown(summary_text)
                 else:
-                    st.warning(
-                        "Unable to generate summary."
-                    )
-
-# ═════════════════════════════════════════════════════════════════════
-# TAB 5 — STRUCTURED EXTRACTION
-# ═════════════════════════════════════════════════════════════════════
+                    st.warning("📝 Unable to generate a detailed summary. The document may not have enough structured information.")
+ 
 with tab5:
-    st.markdown(
-        "<h3 style='color: #1F3A5E;'>🗂️ Structured Extraction</h3>",
-        unsafe_allow_html=True
-    )
-
-    if st.button(
-        "📑 Extract Structured Data",
-        use_container_width=True,
-        key="btn_structured"
-    ):
-
+    st.markdown("<h3 style='color: #1F3A5E;'>🗂️ Structured Extraction</h3>", unsafe_allow_html=True)
+    if st.button("📑 Extract Structured Data", use_container_width=True, key="btn_structured"):
         with st.spinner("Extracting structured data..."):
-
-            result = get_structured(
-                selected_index,
-                top_k
-            )
-
+            result = get_structured(selected_index, top_k)
             if result.get("error"):
-                st.error(
-                    f"Failed to extract data: {result['error']}"
-                )
-
+                st.error(f"Failed to extract data: {result['error']}")
             else:
-                structured_data = result.get(
-                    "structured",
-                    {}
-                )
-
+                structured_data = result.get("structured", {})
                 if structured_data:
-                    st.success(
-                        "Structured data extracted"
-                    )
-
-                    st.json(
-                        structured_data
-                    )
-
+                    st.success("Structured data extracted")
+                    st.json(structured_data)
                 else:
-                    st.info(
-                        "No structured data available."
-                    )
-
-# ── Footer ───────────────────────────────────────────────────────────
+                    st.info("No structured data available.")
+ 
 st.markdown("---")
-
-st.markdown(
-    "<p style='text-align: center; color: #555;'>"
-    "💡 Perform comprehensive legal analysis on your indexed documents"
-    "</p>",
-    unsafe_allow_html=True
-)
+st.markdown("<p style='text-align: center; color: #555;'>💡 Perform comprehensive analysis on your indexed documents</p>", unsafe_allow_html=True)
