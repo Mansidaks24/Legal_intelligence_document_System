@@ -4,12 +4,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 from urllib.parse import quote
 import os
-
+import streamlit as st
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+
+try:
+    BACKEND_URL = st.secrets["BACKEND_URL"]
+except:
+    BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", 180))
 
 def health_check():
