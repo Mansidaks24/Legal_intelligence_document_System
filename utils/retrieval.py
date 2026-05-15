@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Smaller model to prevent Render memory crashes
 _EMBEDDING_MODEL_NAME = os.getenv(
     "EMBEDDING_MODEL",
-    "sentence-transformers/paraphrase-MiniLM-L3-v2"
+    ""sentence-transformers/paraphrase-albert-small-v2""
 )
 
 # ── Confidence threshold (EXTRA-08) ──────────────────────────────────
