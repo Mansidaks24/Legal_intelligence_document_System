@@ -443,89 +443,102 @@ def api_compliance_check(
     """
     import json
 
-    # Parse rules
+    # ── STEP 1: Parse rules safely ───────────────────────────────────
     try:
         if isinstance(rules, str):
-        rules = rules.strip()
+            rules = rules.strip()
 
-        # Handle accidental empty string
-        if not rules:
-            rules_list = []
+            if not rules:
+                rules_list = []
+            else:
+                rules_list = json.loads(rules)
+
+        elif isinstance(rules, list):
+            rules_list = rules
 
         else:
-            rules_list = json.loads(rules)
+            rules_list = []
 
-    elif isinstance(rules, list):
-        rules_list = rules
+        if not isinstance(rules_list, list):
+            raise ValueError("rules must be a JSON array")
 
-    else:
-        rules_list = []
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid rules format: {str(e)}"
+        )
 
-    if not isinstance(rules_list, list):
-        raise ValueError("rules must be a JSON array")
-
-except Exception as e:
-    raise HTTPException(
-        status_code=400,
-        detail=f"Invalid rules format: {str(e)}"
-    )
-
-    # Load vectorstore
+    # ── STEP 2: Load vectorstore ─────────────────────────────────────
     try:
         vs = load_vectorstore(
             store_dir=str(VECTORSTORE_DIR),
             index_name=document
         )
+
     except FileNotFoundError:
         raise HTTPException(
             status_code=404,
             detail=f"No index found for '{document}'"
         )
 
-    # Extract FULL document text
+    # ── STEP 3: Retrieve full document text ──────────────────────────
     try:
-        docs = vs.similarity_search("", k=1000)
+        docs = vs.similarity_search(
+            "document",
+            k=1000
+        )
 
         if not docs:
-            raise ValueError("No content found in document index.")
+            raise ValueError(
+                "No content found in document index."
+            )
 
         combined_text = "\n\n".join(
-            doc.page_content for doc in docs
+            doc.page_content
+            for doc in docs
         )
 
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error extracting full document content: {str(e)}"
+            detail=f"Error extracting document text: {str(e)}"
         )
 
-    # Default rule if none provided
+    # ── STEP 4: Default rules fallback ───────────────────────────────
     if not rules_list:
         rules_list = [
             {
-                "name": "has_termination",
-                "description": "Contains termination clause",
+                "name": "Termination Clause",
+                "description": "Document must contain termination clause",
                 "pattern": "termination",
-                "required": True,
+                "required": True
             }
         ]
 
-    # Run compliance check
+    # ── STEP 5: Run compliance engine ────────────────────────────────
     try:
         result = compliance_check_from_text(
             text=combined_text,
             rules=rules_list
         )
 
+        compliance_results = result.get(
+            "compliance_results",
+            []
+        )
+
+        passed_checks = sum(
+            1
+            for r in compliance_results
+            if r.get("passed")
+        )
+
         return {
             "status": "success",
             "document": document,
-            "compliance_results": result.get("compliance_results", []),
+            "compliance_results": compliance_results,
             "total_checks": len(rules_list),
-            "passed_checks": sum(
-                1 for r in result.get("compliance_results", [])
-                if r.get("passed")
-            ),
+            "passed_checks": passed_checks,
         }
 
     except Exception as e:
