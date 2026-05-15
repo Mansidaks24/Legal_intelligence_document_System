@@ -1,16 +1,13 @@
 """
-retrieval.py  —  IMPROVED VERSION
-------------------------------------
-User Stories covered:
-  US-05 : Advanced Retrieval Pipeline (RAG)
+retrieval.py  —  DEPLOYMENT-STABLE VERSION
+------------------------------------------
+US-05 : Advanced Retrieval Pipeline (RAG)
 
-Additional features added (add to Excel as extras):
-  EXTRA-08 : Confidence threshold filtering (ignores low-quality results)
-  EXTRA-09 : Multi-document support (each doc gets its own FAISS index)
-  EXTRA-10 : Retrieval stats in response (min/max/avg relevance scores)
-
-DEPLOYMENT FIX:
-  FIX-RENDER-01 : Lightweight embedding model for Render free deployment
+Features:
+  EXTRA-08 : Threshold disabled for FakeEmbeddings deployment
+  EXTRA-09 : Multi-document FAISS indexes
+  EXTRA-10 : Retrieval statistics
+  FIX-RENDER-01 : Render-safe low-memory deployment
 """
 import logging
 import os
@@ -22,37 +19,25 @@ from langchain.schema import Document
 
 logger = logging.getLogger(__name__)
 
-# ── Embedding model ───────────────────────────────────────────────────
-# Smaller model to prevent Render memory crashes
-_EMBEDDING_MODEL_NAME = os.getenv(
-    "EMBEDDING_MODEL",
-    "sentence-transformers/paraphrase-albert-small-v2"
-)
+# ── Deployment-safe config ───────────────────────────────────────────
+MIN_RELEVANCE_SCORE = 0.0
 
-# ── Confidence threshold (EXTRA-08) ──────────────────────────────────
-MIN_RELEVANCE_SCORE = float(
-    os.getenv("MIN_RELEVANCE_SCORE", "0.15")
-)
-
-# ─────────────────────────────────────────────────────────────────────
-# Embedding model loader (singleton pattern)
-# FIXED for low-memory deployment
-# ─────────────────────────────────────────────────────────────────────
+# ── Singleton embeddings instance ────────────────────────────────────
 _embeddings_instance = None
 
 
 def _get_embeddings():
     """
-    Ultra-light deployment-safe embeddings for Render free tier.
+    Ultra-light deployment-safe embeddings for free hosting.
     """
     global _embeddings_instance
 
     if _embeddings_instance is None:
         logger.info("Loading ultra-light deployment embeddings")
-
         _embeddings_instance = FakeEmbeddings(size=384)
 
     return _embeddings_instance
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Build vectorstore
@@ -63,7 +48,7 @@ def build_vectorstore(
     index_name: str = "legal_index",
 ) -> FAISS:
     """
-    Embed all chunks and save a FAISS index to disk.
+    Build and save FAISS vectorstore for a document.
     """
 
     if not documents:
@@ -72,11 +57,6 @@ def build_vectorstore(
         )
 
     Path(store_dir).mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    Path("./models").mkdir(
         parents=True,
         exist_ok=True
     )
@@ -97,6 +77,7 @@ def build_vectorstore(
         logger.error(
             f"FAISS build failed: {exc}"
         )
+
         raise RuntimeError(
             f"Vectorstore build error: {exc}"
         ) from exc
@@ -121,7 +102,7 @@ def load_vectorstore(
     index_name: str = "legal_index",
 ) -> FAISS:
     """
-    Load saved FAISS index from disk.
+    Load existing FAISS vectorstore.
     """
 
     index_path = Path(store_dir) / f"{index_name}.faiss"
@@ -161,7 +142,7 @@ def list_available_indexes(
     store_dir: str
 ) -> list[str]:
     """
-    Return all available FAISS indexes.
+    Return all indexed document names.
     """
 
     store_path = Path(store_dir)
@@ -176,7 +157,7 @@ def list_available_indexes(
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Semantic retrieval
+# Retrieval
 # ─────────────────────────────────────────────────────────────────────
 def retrieve_clauses(
     query: str,
@@ -184,7 +165,10 @@ def retrieve_clauses(
     top_k: int = 5,
 ) -> dict:
     """
-    Retrieve semantically relevant legal clauses.
+    Retrieve relevant clauses for legal analysis.
+
+    Threshold filtering disabled because FakeEmbeddings
+    produce weak similarity scores.
     """
 
     if not query or not query.strip():
@@ -216,49 +200,48 @@ def retrieve_clauses(
     clauses = []
 
     for doc, distance in results_with_scores:
+
         relevance = round(
             1 / (1 + float(distance)),
             4
         )
 
-        if relevance < MIN_RELEVANCE_SCORE:
-            logger.debug(
-                f"Filtered chunk "
-                f"{doc.metadata.get('chunk_index')} "
-                f"— score {relevance}"
-            )
-            continue
-
         clauses.append({
             "chunk_index": doc.metadata.get(
-                "chunk_index", -1
+                "chunk_index",
+                -1
             ),
             "source": doc.metadata.get(
-                "source", "unknown"
+                "source",
+                "unknown"
             ),
             "file_type": doc.metadata.get(
-                "file_type", "unknown"
+                "file_type",
+                "unknown"
             ),
             "content": doc.page_content.strip(),
             "relevance_score": relevance,
             "word_count": doc.metadata.get(
-                "word_count", 0
+                "word_count",
+                0
             ),
             "has_monetary_amounts": doc.metadata.get(
-                "has_monetary_amounts", False
+                "has_monetary_amounts",
+                False
             ),
             "has_dates": doc.metadata.get(
-                "has_dates", False
+                "has_dates",
+                False
             ),
         })
 
         if len(clauses) >= top_k:
             break
 
-    # ── Retrieval stats ────────────────────────────────────────────
+    # ── Retrieval statistics ────────────────────────────────────────
     scores = [
-        c["relevance_score"]
-        for c in clauses
+        clause["relevance_score"]
+        for clause in clauses
     ]
 
     stats = {}
@@ -275,8 +258,7 @@ def retrieve_clauses(
         }
 
     logger.info(
-        f"Retrieved {len(clauses)} clauses "
-        f"(after threshold filtering)"
+        f"Retrieved {len(clauses)} clauses"
     )
 
     return {
