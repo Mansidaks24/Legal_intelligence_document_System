@@ -433,6 +433,7 @@ def api_risk_analysis(document: str):
         "severity": result.get("severity"),
     }
 
+
 @app.get("/analysis/compliance", tags=["Analysis"])
 def api_compliance_check(
     document: str = Query(..., description="Document index name"),
@@ -440,112 +441,63 @@ def api_compliance_check(
 ):
     """
     Run compliance checks on an indexed document.
+    
+    Example rules:
+    [
+        {"name": "has_termination", "description": "Has termination clause", "pattern": "termination", "required": true},
+        {"name": "has_liability", "description": "Has liability clause", "pattern": "liability", "required": false}
+    ]
     """
     import json
-
-    # ── STEP 1: Parse rules safely ───────────────────────────────────
+    
     try:
-        if isinstance(rules, str):
-            rules = rules.strip()
-
-            if not rules:
-                rules_list = []
-            else:
-                rules_list = json.loads(rules)
-
-        elif isinstance(rules, list):
-            rules_list = rules
-
-        else:
-            rules_list = []
-
+        rules_list = json.loads(rules)
         if not isinstance(rules_list, list):
             raise ValueError("rules must be a JSON array")
-
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid rules format: {str(e)}"
-        )
-
-    # ── STEP 2: Load vectorstore ─────────────────────────────────────
+        raise HTTPException(status_code=400, detail=f"Invalid rules format: {str(e)}")
+    
+    # Load the document's indexed content
     try:
-        vs = load_vectorstore(
-            store_dir=str(VECTORSTORE_DIR),
-            index_name=document
-        )
-
+        vs = load_vectorstore(store_dir=str(VECTORSTORE_DIR), index_name=document)
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No index found for '{document}'"
-        )
-
-    # ── STEP 3: Retrieve full document text ──────────────────────────
+        raise HTTPException(status_code=404, detail=f"No index found for '{document}'")
+    
+    # Extract text from the document
     try:
-        docs = vs.similarity_search(
-            "document",
-            k=1000
-        )
-
-        if not docs:
-            raise ValueError(
-                "No content found in document index."
-            )
-
+        # Get all clauses from the index
+        clauses = extract_important_clauses(vectorstore=vs, per_query_k=20)
         combined_text = "\n\n".join(
-            doc.page_content
-            for doc in docs
+            f"{c.get('content', '')}" for c in clauses
         )
-
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error extracting document text: {str(e)}"
-        )
-
-    # ── STEP 4: Default rules fallback ───────────────────────────────
-    if not rules_list:
-        rules_list = [
-            {
-                "name": "Termination Clause",
-                "description": "Document must contain termination clause",
-                "pattern": "termination",
-                "required": True
-            }
-        ]
-
-    # ── STEP 5: Run compliance engine ────────────────────────────────
+        raise HTTPException(status_code=500, detail=f"Error extracting content: {str(e)}")
+    
+    # Run compliance check
     try:
-        result = compliance_check_from_text(
-            text=combined_text,
-            rules=rules_list
-        )
-
-        compliance_results = result.get(
-            "compliance_results",
-            []
-        )
-
-        passed_checks = sum(
-            1
-            for r in compliance_results
-            if r.get("passed")
-        )
-
+        if not rules_list:
+            rules_list = [
+                {
+                    "name": "has_termination",
+                    "description": "Contains termination clause",
+                    "pattern": "termination",
+                    "required": True
+                }
+            ]
+        
+        result = compliance_check_from_text(combined_text, rules_list)
+        
         return {
             "status": "success",
             "document": document,
-            "compliance_results": compliance_results,
+            "compliance_results": result.get("compliance_results", []),
             "total_checks": len(rules_list),
-            "passed_checks": passed_checks,
+            "passed_checks": sum(1 for r in result.get("compliance_results", []) if r.get("passed")),
         }
-
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Compliance check error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Compliance check error: {str(e)}")
+
+
 @app.get("/analysis/summary", tags=["Analysis"])
 def api_summarize(document: str, top_k: int = 5):
     try:
