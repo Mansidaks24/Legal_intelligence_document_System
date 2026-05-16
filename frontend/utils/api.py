@@ -246,34 +246,49 @@ def get_risk(index_name, top_k=5):
 def get_compliance(index_name, rules_json):
     """
     Run compliance checks on an indexed document.
-    
+
     Args:
         index_name: The document index name
-        rules_json: JSON string with compliance rules
-    
+        rules_json: Compliance rules (list/dict/JSON string)
+
     Returns:
         dict with compliance results
     """
     try:
+        import json
+
+        # ── Ensure proper JSON serialization ────────────────────────
+        if isinstance(rules_json, (list, dict)):
+            rules_payload = json.dumps(rules_json)
+
+        elif isinstance(rules_json, str):
+            rules_payload = rules_json
+
+        else:
+            rules_payload = "[]"
+
         resp = requests.get(
             f"{BACKEND_URL}/analysis/compliance",
             params={
                 "document": index_name,
-                "rules": rules_json
+                "rules": rules_payload
             },
             timeout=API_TIMEOUT
         )
+
         resp.raise_for_status()
+
         return resp.json()
 
     except Exception as e:
-        logger.error(f"Get compliance error: {e}")
+        logger.error(
+            f"Get compliance error: {e}"
+        )
 
         return {
             "status": "error",
             "error": str(e)
         }
-
 
 # ═════════════════════════════════════════════════════════════════════
 # SUMMARY
