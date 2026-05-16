@@ -128,21 +128,31 @@ RISK_KEYWORDS = {
 }
 
 
+def get_risk_level(score: float) -> str:
+    """
+    Convert numeric score to readable severity level.
+    """
+    if score >= 4:
+        return "HIGH"
+    elif score >= 2:
+        return "MEDIUM"
+    elif score > 0:
+        return "LOW"
+    else:
+        return "NONE"
+
+
 def analyze_risk(clauses: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Keyword-based risk scoring across extracted clauses.
-
-    Returns per-clause scores and an aggregated severity level.
-    Severity:
-      high   → avg_score >= 2.0
-      medium → avg_score >= 0.75
-      low    → avg_score < 0.75
+    Enhanced keyword-based legal risk scoring.
     """
+
     results = []
     total_score = 0.0
 
     for c in clauses:
         text = c.get("content", "").lower()
+
         score = 0.0
         hits = []
 
@@ -151,29 +161,39 @@ def analyze_risk(clauses: List[Dict[str, Any]]) -> Dict[str, Any]:
                 score += weight
                 hits.append(kw)
 
+        score = round(score, 3)
+
+        risk_level = get_risk_level(score)
+
         results.append({
             "chunk_index": c.get("chunk_index"),
             "content": c.get("content"),
-            "score": round(score, 3),
+            "score": score,
             "matched_keywords": hits,
+            "risk_level": risk_level,
         })
+
         total_score += score
 
-    avg_score = round(total_score / max(1, len(results)), 3)
+    avg_score = round(
+        total_score / max(1, len(results)),
+        3
+    )
 
-    if avg_score >= 2.0:
+    if avg_score >= 4:
         severity = "high"
-    elif avg_score >= 0.75:
+    elif avg_score >= 2:
         severity = "medium"
-    else:
+    elif avg_score > 0:
         severity = "low"
+    else:
+        severity = "none"
 
     return {
         "avg_score": avg_score,
         "severity": severity,
-        "per_clause": results,
+        "risks": results,
     }
-
 
 # ─────────────────────────────────────────────────────────────────────
 # US-08 : Compliance Checking  (FIX-02 — accepts both key names)
