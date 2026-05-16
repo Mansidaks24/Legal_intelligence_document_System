@@ -2,6 +2,7 @@ import streamlit as st
 import sys
 from pathlib import Path
 import json
+
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.api import (
@@ -192,7 +193,6 @@ with tab2:
                         "unknown"
                     ).upper()
 
-                    # ── Summary Metrics ─────────────────────
                     col1, col2 = st.columns(2)
 
                     with col1:
@@ -207,23 +207,21 @@ with tab2:
                             severity
                         )
 
-                    # ── Severity Banner ─────────────────────
                     if severity == "HIGH":
                         st.error(
-                            f"⚠️ HIGH RISK DOCUMENT"
+                            "⚠️ HIGH RISK DOCUMENT"
                         )
 
                     elif severity == "MEDIUM":
                         st.warning(
-                            f"⚠️ MEDIUM RISK DOCUMENT"
+                            "⚠️ MEDIUM RISK DOCUMENT"
                         )
 
                     else:
                         st.success(
-                            f"✅ LOW RISK DOCUMENT"
+                            "✅ LOW RISK DOCUMENT"
                         )
 
-                    # ── Individual Risks ────────────────────
                     for i, risk in enumerate(
                         risks,
                         1
@@ -271,162 +269,157 @@ with tab2:
 # ═════════════════════════════════════════════════════════════════════
 # TAB 3 — COMPLIANCE
 # ═════════════════════════════════════════════════════════════════════
-# ═════════════════════════════════════════════════════════════════════
+with tab3:
+    st.markdown(
+        "<h3 style='color: #1F3A5E;'>✅ Compliance Review</h3>",
+        unsafe_allow_html=True
+    )
 
-st.markdown("### Upload Compliance Rules File (JSON or TXT)")
+    st.markdown("### Upload Compliance Rules File (JSON or TXT)")
 
-uploaded_rules = st.file_uploader(
-    "Upload compliance rules file",
-    type=["json", "txt"],
-    key="compliance_rules_upload"
-)
+    uploaded_rules = st.file_uploader(
+        "Upload compliance rules file",
+        type=["json", "txt"],
+        key="compliance_rules_upload"
+    )
 
-default_rules = [
-    {
-        "name": "Confidentiality Check",
-        "description": "Document must contain confidentiality clause",
-        "pattern": "confidential",
-        "required": True
-    },
-    {
-        "name": "Termination Check",
-        "description": "Document must contain termination clause",
-        "pattern": "termination",
-        "required": True
-    }
-]
+    default_rules = [
+        {
+            "name": "Confidentiality Check",
+            "description": "Document must contain confidentiality clause",
+            "pattern": "confidential",
+            "required": True
+        },
+        {
+            "name": "Termination Check",
+            "description": "Document must contain termination clause",
+            "pattern": "termination",
+            "required": True
+        }
+    ]
 
-# ── Text Area for Manual Editing ────────────────────────────────────
-rules_text = st.text_area(
-    "Compliance Rules (JSON):",
-    value=json.dumps(default_rules, indent=2),
-    height=300
-)
+    rules_text = st.text_area(
+        "Compliance Rules (JSON):",
+        value=json.dumps(default_rules, indent=2),
+        height=300
+    )
 
-# ── Rule Selection Logic ────────────────────────────────────────────
-if uploaded_rules is not None:
-    try:
-        file_content = uploaded_rules.read().decode("utf-8")
+    if uploaded_rules is not None:
+        try:
+            file_content = uploaded_rules.read().decode("utf-8")
+            custom_rules = json.loads(file_content)
 
-        custom_rules = json.loads(file_content)
+            if isinstance(custom_rules, list) and len(custom_rules) > 0:
+                rules_to_use = custom_rules
 
-        if isinstance(custom_rules, list) and len(custom_rules) > 0:
-            rules_to_use = custom_rules
+                st.success(
+                    f"✅ Loaded {len(custom_rules)} rules from uploaded file."
+                )
 
-            st.success(
-                f"✅ Loaded {len(custom_rules)} rules from uploaded file."
+                with st.expander("📂 Uploaded Rules Preview"):
+                    st.json(custom_rules)
+
+            else:
+                rules_to_use = default_rules
+
+                st.warning(
+                    "Uploaded file invalid or empty. Using default rules."
+                )
+
+        except Exception as e:
+            rules_to_use = default_rules
+
+            st.error(
+                f"Failed to parse uploaded rules: {str(e)}"
             )
 
-            # Show uploaded rules
-            with st.expander("📂 Uploaded Rules Preview"):
-                st.json(custom_rules)
+    else:
+        try:
+            parsed_rules = json.loads(rules_text)
 
-        else:
+            if isinstance(parsed_rules, list) and len(parsed_rules) > 0:
+                rules_to_use = parsed_rules
+            else:
+                rules_to_use = default_rules
+
+        except Exception:
             rules_to_use = default_rules
 
             st.warning(
-                "Uploaded file invalid or empty. Using default rules."
+                "Manual JSON invalid. Using default rules."
             )
 
-    except Exception as e:
-        rules_to_use = default_rules
+    if st.button(
+        "📋 Check Compliance",
+        use_container_width=True,
+        key="btn_compliance"
+    ):
 
-        st.error(
-            f"Failed to parse uploaded rules: {str(e)}"
-        )
+        with st.spinner("Checking compliance..."):
 
-else:
-    try:
-        parsed_rules = json.loads(rules_text)
+            result = get_compliance(
+                selected_index,
+                rules_to_use
+            )
 
-        if isinstance(parsed_rules, list) and len(parsed_rules) > 0:
-            rules_to_use = parsed_rules
+        if result.get("error"):
+            st.error(
+                f"Compliance check failed: {result['error']}"
+            )
+
         else:
-            rules_to_use = default_rules
+            total = result.get("total_checks", 0)
+            passed = result.get("passed_checks", 0)
 
-    except Exception:
-        rules_to_use = default_rules
-        st.warning(
-            "Manual JSON invalid. Using default rules."
-        )
+            st.success("✅ Compliance check complete")
 
-# ── Compliance Button ───────────────────────────────────────────────
-if st.button(
-    "📋 Check Compliance",
-    use_container_width=True,
-    key="btn_compliance"
-):
+            col1, col2 = st.columns(2)
 
-    with st.spinner("Checking compliance..."):
+            with col1:
+                st.metric("Total Checks", total)
 
-        result = get_compliance(
-            selected_index,
-            rules_to_use
-        )
+            with col2:
+                st.metric("Passed", f"{passed}/{total}")
 
-    if result.get("error"):
-        st.error(
-            f"Compliance check failed: {result['error']}"
-        )
+            st.markdown("### Detailed Results:")
 
-    else:
-        total = result.get("total_checks", 0)
-        passed = result.get("passed_checks", 0)
+            for rule in result.get(
+                "compliance_results",
+                []
+            ):
 
-        st.success("✅ Compliance check complete")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.metric(
-                "Total Checks",
-                total
-            )
-
-        with col2:
-            st.metric(
-                "Passed",
-                f"{passed}/{total}"
-            )
-
-        st.markdown("### Detailed Results:")
-
-        for rule in result.get(
-            "compliance_results",
-            []
-        ):
-
-            passed_rule = rule.get(
-                "passed",
-                False
-            )
-
-            icon = "✅" if passed_rule else "❌"
-
-            rule_name = rule.get(
-                "name",
-                "Unknown Rule"
-            )
-
-            matched = rule.get(
-                "matched_text",
-                ""
-            )
-
-            if passed_rule:
-                st.success(
-                    f"{icon} {rule_name} - Pattern '{rule.get('pattern')}' found"
-                )
-            else:
-                st.error(
-                    f"{icon} {rule_name} - Pattern '{rule.get('pattern')}' missing"
+                passed_rule = rule.get(
+                    "passed",
+                    False
                 )
 
-            if matched:
-                st.code(
-                    matched,
-                    language="text"
+                icon = "✅" if passed_rule else "❌"
+
+                rule_name = rule.get(
+                    "name",
+                    "Unknown Rule"
                 )
+
+                matched = rule.get(
+                    "matched_text",
+                    ""
+                )
+
+                if passed_rule:
+                    st.success(
+                        f"{icon} {rule_name} - Pattern '{rule.get('pattern')}' found"
+                    )
+                else:
+                    st.error(
+                        f"{icon} {rule_name} - Pattern '{rule.get('pattern')}' missing"
+                    )
+
+                if matched:
+                    st.code(
+                        matched,
+                        language="text"
+                    )
+
 # ═════════════════════════════════════════════════════════════════════
 # TAB 4 — SUMMARY
 # ═════════════════════════════════════════════════════════════════════
