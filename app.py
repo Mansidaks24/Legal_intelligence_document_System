@@ -427,11 +427,11 @@ def api_risk_analysis(document: str):
     clauses = extract_important_clauses(vectorstore=vs, per_query_k=6)
     result = analyze_risk(clauses)
     return {
-        "status": "success",
-        "risks": result.get("per_clause", []),
-        "avg_score": result.get("avg_score"),
-        "severity": result.get("severity"),
-    }
+    "status": "success",
+    "risks": result.get("risks", []),
+    "avg_score": result.get("avg_score", 0),
+    "severity": result.get("severity", "none"),
+}
 
 
 @app.get("/analysis/compliance", tags=["Analysis"])
