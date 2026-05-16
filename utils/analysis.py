@@ -179,62 +179,119 @@ def analyze_risk(clauses: List[Dict[str, Any]]) -> Dict[str, Any]:
 # US-08 : Compliance Checking  (FIX-02 — accepts both key names)
 # ─────────────────────────────────────────────────────────────────────
 
+# ═════════════════════════════════════════════════════════════════════
+# FULL CORRECTED FILE:
+# utils/analysis.py
+#
+# REPLACE ONLY THE compliance_check_from_text FUNCTION
+# KEEP ALL OTHER FUNCTIONS SAME
+# ═════════════════════════════════════════════════════════════════════
+
 def compliance_check_from_text(
     text: str,
     rules: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """
-    Check a document against a list of regex rules.
+    Check a document against a list of regex compliance rules.
 
-    FIX-02: Each rule now accepts BOTH 'must_exist' AND 'required'
-    as key names — fixing the 422 error from the API endpoint.
-
-    Each rule dict:
-      name/id          : rule name
-      description      : what it checks
-      pattern          : regex pattern to search for
-      must_exist/required : True = pattern must be found, False = optional
+    FIXES:
+    ✅ Supports both 'required' and 'must_exist'
+    ✅ Supports both 'name' and 'id'
+    ✅ Returns frontend-compatible structure
+    ✅ Includes matched_text
+    ✅ Prevents 0/0 rule issue
     """
+
+    import re
+
     outcomes = []
 
     for r in rules:
-        pat = r.get("pattern", "")
 
-        # FIX-02: accept both 'required' and 'must_exist' key names
-        must_exist = r.get("must_exist", r.get("required", True))
+        pat = r.get(
+            "pattern",
+            ""
+        )
 
-        # FIX-02: accept both 'name' and 'id' key names
-        rule_id = r.get("id", r.get("name", "unknown"))
-        description = r.get("description", rule_id)
+        must_exist = r.get(
+            "must_exist",
+            r.get(
+                "required",
+                True
+            )
+        )
+
+        rule_id = r.get(
+            "id",
+            r.get(
+                "name",
+                "unknown"
+            )
+        )
+
+        description = r.get(
+            "description",
+            rule_id
+        )
 
         found = False
+        matched_text = ""
+
         try:
             if pat:
-                found = bool(re.search(pat, text, flags=re.IGNORECASE | re.MULTILINE))
+                match = re.search(
+                    pat,
+                    text,
+                    flags=re.IGNORECASE | re.MULTILINE
+                )
+
+                if match:
+                    found = True
+                    matched_text = match.group(0)
+
         except re.error as e:
-            logger.warning(f"Invalid regex pattern '{pat}': {e}")
+            logger.warning(
+                f"Invalid regex pattern '{pat}': {e}"
+            )
+
             found = False
 
-        passed = (found and must_exist) or (not found and not must_exist)
+        passed = (
+            (found and must_exist)
+            or
+            (not found and not must_exist)
+        )
 
         outcomes.append({
             "id": rule_id,
+            "name": rule_id,
             "description": description,
             "pattern": pat,
             "must_exist": must_exist,
             "found": found,
             "passed": passed,
+            "matched_text": matched_text,
         })
 
-    overall = all(o["passed"] for o in outcomes)
-    passed_count = sum(1 for o in outcomes if o["passed"])
+    overall = all(
+        o["passed"]
+        for o in outcomes
+    )
 
+    passed_count = sum(
+        1
+        for o in outcomes
+        if o["passed"]
+    )
+
+    
     return {
         "overall_passed": overall,
         "passed_count": passed_count,
         "total_rules": len(outcomes),
-        "rules": outcomes,
+        "compliance_results": outcomes,
     }
+
 
 
 # ─────────────────────────────────────────────────────────────────────
