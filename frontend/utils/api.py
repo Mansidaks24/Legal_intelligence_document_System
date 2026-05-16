@@ -212,7 +212,8 @@ def get_risk(index_name, top_k=5):
         resp = requests.get(
             f"{BACKEND_URL}/analysis/risk",
             params={
-                "document": index_name
+                "document": index_name,
+                "top_k": top_k
             },
             timeout=API_TIMEOUT
         )
@@ -223,23 +224,23 @@ def get_risk(index_name, top_k=5):
 
         return {
             "risks": data.get("risks", []),
-            "avg_score": data.get("avg_score"),
-            "severity": data.get("severity"),
+            "avg_score": data.get("avg_score", 0),
+            "severity": data.get("severity", "none"),
             "status": data.get("status", "success")
         }
 
     except Exception as e:
-        logger.error(f"Get risk error: {e}")
+        logger.error(
+            f"Get risk error: {e}"
+        )
 
         return {
             "risks": [],
-            "avg_score": None,
-            "severity": None,
+            "avg_score": 0,
+            "severity": "none",
             "status": "error",
             "error": str(e)
         }
-
-
 # ═════════════════════════════════════════════════════════════════════
 # COMPLIANCE
 # ═════════════════════════════════════════════════════════════════════
