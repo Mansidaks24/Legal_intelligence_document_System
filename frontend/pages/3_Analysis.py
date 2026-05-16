@@ -271,121 +271,162 @@ with tab2:
 # ═════════════════════════════════════════════════════════════════════
 # TAB 3 — COMPLIANCE
 # ═════════════════════════════════════════════════════════════════════
-with tab3:
-    st.markdown(
-        "<h3 style='color: #1F3A5E;'>✅ Compliance Review</h3>",
-        unsafe_allow_html=True
-    )
+# ═════════════════════════════════════════════════════════════════════
 
-    st.info(
-        "📌 Define compliance rules below as JSON. "
-        "Each rule checks if a pattern exists in the document."
-    )
+st.markdown("### Upload Compliance Rules File (JSON or TXT)")
 
-    # ── Compliance Rules Input ──────────────────────────────────────
-    st.markdown("**Define Compliance Rules (JSON format):**")
-    
-    default_rules = '''[
+uploaded_rules = st.file_uploader(
+    "Upload compliance rules file",
+    type=["json", "txt"],
+    key="compliance_rules_upload"
+)
+
+default_rules = [
     {
         "name": "Confidentiality Check",
         "description": "Document must contain confidentiality clause",
         "pattern": "confidential",
-        "required": true
+        "required": True
     },
     {
         "name": "Termination Check",
         "description": "Document must contain termination clause",
         "pattern": "termination",
-        "required": true
+        "required": True
     }
-]'''
+]
 
-    rules_json = st.text_area(
-        "Compliance Rules (JSON):",
-        value=default_rules,
-        height=200,
-        key="compliance_rules_input"
-    )
+# ── Text Area for Manual Editing ────────────────────────────────────
+rules_text = st.text_area(
+    "Compliance Rules (JSON):",
+    value=json.dumps(default_rules, indent=2),
+    height=300
+)
 
-    if st.button(
-        "📋 Check Compliance",
-        use_container_width=True,
-        key="btn_compliance"
-    ):
+# ── Rule Selection Logic ────────────────────────────────────────────
+if uploaded_rules is not None:
+    try:
+        file_content = uploaded_rules.read().decode("utf-8")
 
-        with st.spinner("Checking compliance..."):
-            import json
-            
-            # Validate JSON
-            try:
-                rules_list = json.loads(rules_json)
-                if not isinstance(rules_list, list):
-                    st.error("Rules must be a JSON array")
-                    st.stop()
-            except json.JSONDecodeError as e:
-                st.error(f"Invalid JSON format: {str(e)}")
-                st.stop()
+        custom_rules = json.loads(file_content)
 
-            # Call compliance API
-            result = get_compliance(
-                selected_index,
-                rules_json
+        if isinstance(custom_rules, list) and len(custom_rules) > 0:
+            rules_to_use = custom_rules
+
+            st.success(
+                f"✅ Loaded {len(custom_rules)} rules from uploaded file."
             )
 
-            if result.get("error"):
-                st.error(
-                    f"Compliance check failed: {result['error']}"
+            # Show uploaded rules
+            with st.expander("📂 Uploaded Rules Preview"):
+                st.json(custom_rules)
+
+        else:
+            rules_to_use = default_rules
+
+            st.warning(
+                "Uploaded file invalid or empty. Using default rules."
+            )
+
+    except Exception as e:
+        rules_to_use = default_rules
+
+        st.error(
+            f"Failed to parse uploaded rules: {str(e)}"
+        )
+
+else:
+    try:
+        parsed_rules = json.loads(rules_text)
+
+        if isinstance(parsed_rules, list) and len(parsed_rules) > 0:
+            rules_to_use = parsed_rules
+        else:
+            rules_to_use = default_rules
+
+    except Exception:
+        rules_to_use = default_rules
+        st.warning(
+            "Manual JSON invalid. Using default rules."
+        )
+
+# ── Compliance Button ───────────────────────────────────────────────
+if st.button(
+    "📋 Check Compliance",
+    use_container_width=True,
+    key="btn_compliance"
+):
+
+    with st.spinner("Checking compliance..."):
+
+        result = get_compliance(
+            selected_index,
+            rules_to_use
+        )
+
+    if result.get("error"):
+        st.error(
+            f"Compliance check failed: {result['error']}"
+        )
+
+    else:
+        total = result.get("total_checks", 0)
+        passed = result.get("passed_checks", 0)
+
+        st.success("✅ Compliance check complete")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.metric(
+                "Total Checks",
+                total
+            )
+
+        with col2:
+            st.metric(
+                "Passed",
+                f"{passed}/{total}"
+            )
+
+        st.markdown("### Detailed Results:")
+
+        for rule in result.get(
+            "compliance_results",
+            []
+        ):
+
+            passed_rule = rule.get(
+                "passed",
+                False
+            )
+
+            icon = "✅" if passed_rule else "❌"
+
+            rule_name = rule.get(
+                "name",
+                "Unknown Rule"
+            )
+
+            matched = rule.get(
+                "matched_text",
+                ""
+            )
+
+            if passed_rule:
+                st.success(
+                    f"{icon} {rule_name} - Pattern '{rule.get('pattern')}' found"
                 )
-
-            elif result.get("status") == "success":
-                compliance_results = result.get("compliance_results", [])
-                
-                if compliance_results:
-                    st.success(
-                        f"✅ Compliance check complete"
-                    )
-
-                    # Show summary
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric(
-                            "Total Checks",
-                            len(compliance_results)
-                        )
-                    with col2:
-                        passed = sum(
-                            1 for r in compliance_results 
-                            if r.get("passed")
-                        )
-                        st.metric(
-                            "Passed",
-                            f"{passed}/{len(compliance_results)}"
-                        )
-
-                    # Show detailed results
-                    st.markdown("**Detailed Results:**")
-                    for check in compliance_results:
-                        name = check.get("name", "Unknown")
-                        passed = check.get("passed", False)
-                        pattern = check.get("pattern", "")
-                        
-                        if passed:
-                            st.success(
-                                f"✅ {name} - Pattern '{pattern}' found"
-                            )
-                        else:
-                            st.warning(
-                                f"⚠️ {name} - Pattern '{pattern}' NOT found"
-                            )
-
-                else:
-                    st.info("No compliance results available.")
-
             else:
-                st.warning(
-                    "Compliance check returned unexpected result"
+                st.error(
+                    f"{icon} {rule_name} - Pattern '{rule.get('pattern')}' missing"
                 )
 
+            if matched:
+                st.code(
+                    matched,
+                    language="text"
+                )
 # ═════════════════════════════════════════════════════════════════════
 # TAB 4 — SUMMARY
 # ═════════════════════════════════════════════════════════════════════
