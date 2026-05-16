@@ -1,6 +1,5 @@
 import streamlit as st
 import sys
-import json
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -11,15 +10,12 @@ from utils.api import (
     get_risk,
     get_compliance,
     get_summary,
-    get_structured
+    get_structured,
 )
 
 from utils.styles import apply_judicial_theme
 
-
-# ═════════════════════════════════════════════════════════════════════
-# PAGE CONFIG
-# ═════════════════════════════════════════════════════════════════════
+# ── Page Config ──────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Analysis - Legal Document Intelligence",
     page_icon="📊",
@@ -28,10 +24,7 @@ st.set_page_config(
 
 apply_judicial_theme()
 
-
-# ═════════════════════════════════════════════════════════════════════
-# HEADER
-# ═════════════════════════════════════════════════════════════════════
+# ── Header ───────────────────────────────────────────────────────────
 st.markdown(
     "<h1 style='text-align: center; color: #1F3A5E;'>📊 DOCUMENT ANALYSIS</h1>",
     unsafe_allow_html=True
@@ -39,10 +32,7 @@ st.markdown(
 
 st.markdown("---")
 
-
-# ═════════════════════════════════════════════════════════════════════
-# DOCUMENT SELECTION
-# ═════════════════════════════════════════════════════════════════════
+# ── Document Check ───────────────────────────────────────────────────
 docs = get_documents()
 
 if docs.get("total", 0) == 0:
@@ -52,8 +42,8 @@ if docs.get("total", 0) == 0:
     st.stop()
 
 indices = [
-    d["index_name"]
-    for d in docs["documents"]
+    d.get("index_name", "")
+    for d in docs.get("documents", [])
 ]
 
 selected_index = st.selectbox(
@@ -68,10 +58,7 @@ top_k = st.slider(
     5
 )
 
-
-# ═════════════════════════════════════════════════════════════════════
-# TABS
-# ═════════════════════════════════════════════════════════════════════
+# ── Tabs ─────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     [
         "Clauses",
@@ -81,7 +68,6 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
         "Structured"
     ]
 )
-
 
 # ═════════════════════════════════════════════════════════════════════
 # TAB 1 — CLAUSES
@@ -118,28 +104,51 @@ with tab1:
                         f"Found {len(clauses)} key clauses"
                     )
 
-                    for i, clause in enumerate(
-                        clauses,
-                        1
-                    ):
+                    for clause in clauses:
+                        chunk_index = clause.get(
+                            "chunk_index",
+                            "N/A"
+                        )
+
+                        relevance = clause.get(
+                            "relevance_score",
+                            0
+                        )
+
                         with st.expander(
-                            f"Clause {i}"
+                            f"Clause #{chunk_index} | Relevance Score: {relevance}"
                         ):
+
                             st.markdown(
                                 clause.get(
                                     "content",
-                                    clause.get(
-                                        "text",
-                                        ""
-                                    )
+                                    "No content available."
                                 )
                             )
+
+                            st.caption(
+                                f"Source: {clause.get('source', 'Unknown')} | "
+                                f"Words: {clause.get('word_count', 0)}"
+                            )
+
+                            if clause.get(
+                                "has_monetary_amounts"
+                            ):
+                                st.info(
+                                    "💰 Contains monetary references"
+                                )
+
+                            if clause.get(
+                                "has_dates"
+                            ):
+                                st.info(
+                                    "📅 Contains date references"
+                                )
 
                 else:
                     st.info(
                         "No clauses found."
                     )
-
 
 # ═════════════════════════════════════════════════════════════════════
 # TAB 2 — RISK ANALYSIS
@@ -172,31 +181,49 @@ with tab2:
                 risks = result.get("risks", [])
 
                 if risks:
-                    severity = result.get(
-                        "severity",
-                        "unknown"
-                    ).upper()
 
                     avg_score = result.get(
                         "avg_score",
                         0
                     )
 
+                    severity = result.get(
+                        "severity",
+                        "unknown"
+                    ).upper()
+
+                    # ── Summary Metrics ─────────────────────
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.metric(
+                            "Average Risk Score",
+                            avg_score
+                        )
+
+                    with col2:
+                        st.metric(
+                            "Severity Level",
+                            severity
+                        )
+
+                    # ── Severity Banner ─────────────────────
                     if severity == "HIGH":
                         st.error(
-                            f"⚠️ HIGH RISK - Average Score: {avg_score}"
+                            f"⚠️ HIGH RISK DOCUMENT"
                         )
 
                     elif severity == "MEDIUM":
                         st.warning(
-                            f"⚠️ MEDIUM RISK - Average Score: {avg_score}"
+                            f"⚠️ MEDIUM RISK DOCUMENT"
                         )
 
                     else:
                         st.success(
-                            f"✅ LOW RISK - Average Score: {avg_score}"
+                            f"✅ LOW RISK DOCUMENT"
                         )
 
+                    # ── Individual Risks ────────────────────
                     for i, risk in enumerate(
                         risks,
                         1
@@ -204,7 +231,10 @@ with tab2:
 
                         score = risk.get(
                             "score",
-                            0
+                            risk.get(
+                                "risk_score",
+                                0
+                            )
                         )
 
                         keywords = risk.get(
@@ -212,14 +242,19 @@ with tab2:
                             []
                         )
 
+                        risk_level = risk.get(
+                            "risk_level",
+                            "Unknown"
+                        )
+
                         with st.expander(
-                            f"Risk {i} (Score: {score})"
+                            f"Risk {i} | Score: {score} | Level: {risk_level}"
                         ):
 
                             st.markdown(
                                 risk.get(
                                     "content",
-                                    ""
+                                    "No content available."
                                 )
                             )
 
@@ -230,9 +265,8 @@ with tab2:
 
                 else:
                     st.info(
-                        "No risk analysis available."
+                        "No significant risks detected."
                     )
-
 
 # ═════════════════════════════════════════════════════════════════════
 # TAB 3 — COMPLIANCE
@@ -243,95 +277,36 @@ with tab3:
         unsafe_allow_html=True
     )
 
-    st.markdown(
-        "### Upload Compliance Rules File (JSON or TXT)"
+    st.info(
+        "📌 Define compliance rules below as JSON. "
+        "Each rule checks if a pattern exists in the document."
     )
 
-    uploaded_rules = st.file_uploader(
-        "Upload compliance rules file",
-        type=["json", "txt"],
-        key="compliance_rules_upload"
+    # ── Compliance Rules Input ──────────────────────────────────────
+    st.markdown("**Define Compliance Rules (JSON format):**")
+    
+    default_rules = '''[
+    {
+        "name": "Confidentiality Check",
+        "description": "Document must contain confidentiality clause",
+        "pattern": "confidential",
+        "required": true
+    },
+    {
+        "name": "Termination Check",
+        "description": "Document must contain termination clause",
+        "pattern": "termination",
+        "required": true
+    }
+]'''
+
+    rules_json = st.text_area(
+        "Compliance Rules (JSON):",
+        value=default_rules,
+        height=200,
+        key="compliance_rules_input"
     )
 
-    default_rules = [
-        {
-            "name": "Notice Period Check",
-            "description": "Document must contain notice period clause",
-            "pattern": "notice period",
-            "required": True
-        },
-        {
-            "name": "Penalty Clause Check",
-            "description": "Document must contain reimbursement or penalty clause",
-            "pattern": "reimbursement|penalty",
-            "required": True
-        },
-        {
-            "name": "Confidentiality Check",
-            "description": "Document must contain confidentiality clause",
-            "pattern": "confidential",
-            "required": True
-        },
-        {
-            "name": "Termination Check",
-            "description": "Document must contain termination clause",
-            "pattern": "termination",
-            "required": True
-        }
-    ]
-
-    # ── Manual Rules Input ───────────────────────────────────────────
-    rules_text = st.text_area(
-        "Compliance Rules (JSON format)",
-        value=json.dumps(default_rules, indent=2),
-        height=250
-    )
-
-    # ── Determine Active Rules ───────────────────────────────────────
-    if uploaded_rules is not None:
-        try:
-            file_content = uploaded_rules.read().decode("utf-8")
-
-            custom_rules = json.loads(file_content)
-
-            if isinstance(custom_rules, list) and len(custom_rules) > 0:
-                rules_to_use = custom_rules
-
-                st.success(
-                    f"Loaded {len(custom_rules)} custom compliance rules."
-                )
-
-            else:
-                rules_to_use = default_rules
-
-                st.warning(
-                    "Uploaded file is empty or invalid. Using default rules."
-                )
-
-        except Exception as e:
-            rules_to_use = default_rules
-
-            st.error(
-                f"Failed to parse uploaded rules: {str(e)}"
-            )
-
-    else:
-        try:
-            parsed_rules = json.loads(rules_text)
-
-            if isinstance(parsed_rules, list) and len(parsed_rules) > 0:
-                rules_to_use = parsed_rules
-            else:
-                rules_to_use = default_rules
-
-        except Exception:
-            rules_to_use = default_rules
-
-    # ── Display Active Rules ─────────────────────────────────────────
-    with st.expander("📜 Active Compliance Rules"):
-        st.json(rules_to_use)
-
-    # ── Compliance Check Button ──────────────────────────────────────
     if st.button(
         "📋 Check Compliance",
         use_container_width=True,
@@ -339,93 +314,77 @@ with tab3:
     ):
 
         with st.spinner("Checking compliance..."):
+            import json
+            
+            # Validate JSON
+            try:
+                rules_list = json.loads(rules_json)
+                if not isinstance(rules_list, list):
+                    st.error("Rules must be a JSON array")
+                    st.stop()
+            except json.JSONDecodeError as e:
+                st.error(f"Invalid JSON format: {str(e)}")
+                st.stop()
 
+            # Call compliance API
             result = get_compliance(
                 selected_index,
-                rules_to_use
+                rules_json
             )
 
-        if result.get("error"):
-            st.error(
-                f"Compliance check failed: {result['error']}"
-            )
-
-        else:
-            passed = result.get(
-                "passed_checks",
-                0
-            )
-
-            total = result.get(
-                "total_checks",
-                0
-            )
-
-            if total == 0:
+            if result.get("error"):
                 st.error(
-                    "❌ No compliance rules were processed. Check JSON formatting."
+                    f"Compliance check failed: {result['error']}"
                 )
 
-            elif passed == total:
-                st.success(
-                    f"✅ Compliance Passed! {passed}/{total} rules satisfied"
-                )
-
-            elif passed > 0:
-                st.warning(
-                    f"⚠️ Partial Compliance: {passed}/{total} rules satisfied"
-                )
-
-            else:
-                st.error(
-                    f"❌ Compliance Failed! Only {passed}/{total} rules satisfied"
-                )
-
-            # ── Rule Results ─────────────────────────────────────────
-            for rule in result.get(
-                "compliance_results",
-                []
-            ):
-
-                rule_name = rule.get(
-                    "name",
-                    "Unknown Rule"
-                )
-
-                passed_rule = rule.get(
-                    "passed",
-                    False
-                )
-
-                description = rule.get(
-                    "description",
-                    ""
-                )
-
-                matched_text = rule.get(
-                    "matched_text",
-                    ""
-                )
-
-                icon = "✅" if passed_rule else "❌"
-
-                with st.expander(
-                    f"{icon} {rule_name}"
-                ):
-                    st.write(
-                        f"**Description:** {description}"
+            elif result.get("status") == "success":
+                compliance_results = result.get("compliance_results", [])
+                
+                if compliance_results:
+                    st.success(
+                        f"✅ Compliance check complete"
                     )
 
-                    st.write(
-                        f"**Status:** {'Passed' if passed_rule else 'Failed'}"
-                    )
-
-                    if matched_text:
-                        st.code(
-                            matched_text,
-                            language="text"
+                    # Show summary
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric(
+                            "Total Checks",
+                            len(compliance_results)
+                        )
+                    with col2:
+                        passed = sum(
+                            1 for r in compliance_results 
+                            if r.get("passed")
+                        )
+                        st.metric(
+                            "Passed",
+                            f"{passed}/{len(compliance_results)}"
                         )
 
+                    # Show detailed results
+                    st.markdown("**Detailed Results:**")
+                    for check in compliance_results:
+                        name = check.get("name", "Unknown")
+                        passed = check.get("passed", False)
+                        pattern = check.get("pattern", "")
+                        
+                        if passed:
+                            st.success(
+                                f"✅ {name} - Pattern '{pattern}' found"
+                            )
+                        else:
+                            st.warning(
+                                f"⚠️ {name} - Pattern '{pattern}' NOT found"
+                            )
+
+                else:
+                    st.info("No compliance results available.")
+
+            else:
+                st.warning(
+                    "Compliance check returned unexpected result"
+                )
 
 # ═════════════════════════════════════════════════════════════════════
 # TAB 4 — SUMMARY
@@ -442,9 +401,7 @@ with tab4:
         key="btn_summary"
     ):
 
-        with st.spinner(
-            "Generating summary..."
-        ):
+        with st.spinner("Generating summary..."):
 
             result = get_summary(
                 selected_index,
@@ -459,7 +416,7 @@ with tab4:
             else:
                 summary_text = result.get(
                     "summary",
-                    "No summary available."
+                    ""
                 )
 
                 if summary_text:
@@ -467,15 +424,16 @@ with tab4:
                         "✅ Summary generated"
                     )
 
-                    st.markdown(
-                        summary_text
+                    st.text_area(
+                        "Summary",
+                        summary_text,
+                        height=400
                     )
 
                 else:
                     st.warning(
                         "Unable to generate summary."
                     )
-
 
 # ═════════════════════════════════════════════════════════════════════
 # TAB 5 — STRUCTURED EXTRACTION
@@ -492,9 +450,7 @@ with tab5:
         key="btn_structured"
     ):
 
-        with st.spinner(
-            "Extracting structured data..."
-        ):
+        with st.spinner("Extracting structured data..."):
 
             result = get_structured(
                 selected_index,
@@ -526,15 +482,12 @@ with tab5:
                         "No structured data available."
                     )
 
-
-# ═════════════════════════════════════════════════════════════════════
-# FOOTER
-# ═════════════════════════════════════════════════════════════════════
+# ── Footer ───────────────────────────────────────────────────────────
 st.markdown("---")
 
 st.markdown(
     "<p style='text-align: center; color: #555;'>"
-    "💡 Perform comprehensive analysis on your indexed documents"
+    "💡 Perform comprehensive legal analysis on your indexed documents"
     "</p>",
     unsafe_allow_html=True
 )
